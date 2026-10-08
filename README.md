@@ -30,4 +30,4 @@ DGFiP's external specifications (Annex 2, Flux 6). **Not verified against a plat
 [Documentation](docs/index.md): the sources and what is missing from them, the options, each
 operation and its route, the webhooks' signature, what was verified.
 
-License: LGPL-3.0-or-later.
+License: MIT since 2026-10-09; earlier versions remain published under LGPL-3.0-or-later.
