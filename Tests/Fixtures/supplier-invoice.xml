@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100">
+  <rsm:ExchangedDocument><ram:ID>FA-77</ram:ID><ram:TypeCode>380</ram:TypeCode></rsm:ExchangedDocument>
+</rsm:CrossIndustryInvoice>

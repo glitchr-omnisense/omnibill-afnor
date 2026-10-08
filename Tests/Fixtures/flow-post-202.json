@@ -1,0 +1,10 @@
+{
+  "flowId": "8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b",
+  "submittedAt": "2026-10-08T08:00:00Z",
+  "trackingId": "order-42",
+  "name": "F-2026-042.pdf",
+  "processingRule": "B2B",
+  "flowSyntax": "Factur-X",
+  "flowProfile": "Extended-CTC-FR",
+  "sha256": "5d1f2b4c6e8a0c2e4f6a8b0d2f4a6c8e0a2c4e6f8b0d2f4a6c8e0a2c4e6f8b0d"
+}

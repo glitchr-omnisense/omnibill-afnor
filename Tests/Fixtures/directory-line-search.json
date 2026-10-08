@@ -1,0 +1,8 @@
+{
+  "search": {"filters": {"siren": {"op": "strict", "value": "702042755"}}, "include": ["siren", "siret", "routingCode"]},
+  "totalNumberOfResults": 2,
+  "results": [
+    {"addressingIdentifier": "702042755", "platformType": "WK", "directoryLineStatus": "Enabled", "siren": "702042755", "legalUnit": {"siren": "702042755", "businessName": "MAISON ERABLE", "entityType": "Private", "administrativeStatus": "A"}},
+    {"addressingIdentifier": "702042755_70204275500240_ACHATS", "platformType": "WK", "directoryLineStatus": "Upcoming", "siren": "702042755", "siret": "70204275500240", "routingIdentifier": "ACHATS", "legalUnit": {"siren": "702042755", "businessName": "MAISON ERABLE"}}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "flowId": "0b9c8d7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e",
+  "submittedAt": "2026-10-08T08:10:00Z",
+  "updatedAt": "2026-10-08T08:10:05Z",
+  "name": "F-2026-043.xml",
+  "processingRule": "Undefined",
+  "processingRuleSource": "Computed",
+  "flowSyntax": "CII",
+  "flowProfile": "Undefined",
+  "flowType": "CustomerInvoice",
+  "flowDirection": "Out",
+  "acknowledgement": {
+    "status": "Error",
+    "details": [
+      {"level": "Error", "item": "F-2026-043.xml", "reasonCode": "InvalidSchema", "reasonMessage": "The file does not validate against the CII schema"}
+    ]
+  }
+}

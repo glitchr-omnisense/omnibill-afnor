@@ -1,0 +1,46 @@
+{
+    "name": "omnibill/afnor",
+    "type": "library",
+    "description": "Omnibill AFNOR: an approved platform (plateforme agréée) through the standard API of XP Z12-013 - the Flow Service (submit an invoice, a lifecycle status or an e-reporting file, follow its acknowledgement, receive suppliers' invoices and statuses, webhooks with their signature checked) and the Directory Service (where a SIREN or a SIRET receives); any platform that implements the standard, by its address.",
+    "keywords": [
+        "invoice",
+        "e-invoicing",
+        "facture-electronique",
+        "xp-z12-013",
+        "plateforme-agreee",
+        "omnibill"
+    ],
+    "homepage": "https://github.com/glitchr-studio/omnibill-afnor",
+    "license": "LGPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Marco Meyer",
+            "email": "marco.meyer@glitchr.io"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "ext-dom": "*",
+        "glitchr/omnibill": "^1.0@dev",
+        "symfony/http-client": "^6.4|^7.0|^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Omnibill\\Afnor\\": ""
+        },
+        "exclude-from-classmap": [
+            "/Tests/"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Omnibill\\Afnor\\Tests\\": "Tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

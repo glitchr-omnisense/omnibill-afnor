@@ -1,0 +1,33 @@
+{
+  "limit": 25,
+  "nextCursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0wOFQwOTowMDowMFoiLCJpZCI6MTIzNH0=",
+  "filters": {"flowDirection": ["In"]},
+  "results": [
+    {
+      "flowId": "c1a2b3c4-d5e6-4f70-8a9b-0c1d2e3f4a5b",
+      "submittedAt": "2026-10-08T08:30:00Z",
+      "updatedAt": "2026-10-08T08:30:02Z",
+      "name": "FA-77.xml",
+      "processingRule": "B2B",
+      "processingRuleSource": "Computed",
+      "flowSyntax": "CII",
+      "flowProfile": "CIUS",
+      "flowType": "SupplierInvoice",
+      "flowDirection": "In",
+      "acknowledgement": {"status": "Ok"}
+    },
+    {
+      "flowId": "d2b3c4d5-e6f7-4a80-9b0c-1d2e3f4a5b6c",
+      "submittedAt": "2026-10-08T09:00:00Z",
+      "updatedAt": "2026-10-08T09:00:01Z",
+      "name": "CDV-212-F-2026-042.xml",
+      "processingRule": "NotApplicable",
+      "processingRuleSource": "Computed",
+      "flowSyntax": "CDAR",
+      "flowProfile": "Undefined",
+      "flowType": "CustomerInvoiceLC",
+      "flowDirection": "In",
+      "acknowledgement": {"status": "Ok"}
+    }
+  ]
+}
