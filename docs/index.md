@@ -1,9 +1,20 @@
----
-title: omnibill/afnor
-order: 1
----
-
 # omnibill/afnor
+
+An approved platform (plateforme agréée) for [omnisense/omnibill](https://github.com/glitchr-omnisense/omnibill),
+through the standard API of XP Z12-013 - one package for every platform that implements it, told
+apart by their addresses and credentials. It submits invoices, follows their acknowledgement,
+receives suppliers' invoices and lifecycle statuses, declares statuses, reads the national directory,
+transmits e-reporting files and checks webhooks. The gateway calls, on the platform's addresses (no
+default: each platform gives its own; the platform's test environment is another set of addresses):
+
+| Operation | Service | Route |
+|---|---|---|
+| token | OAuth 2.0 | `POST <token_url>`, `grant_type=client_credentials` |
+| submit, setStatus, report | Flow Service | `POST <flow_url>/v1/flows` (multipart) |
+| fetchStatus | Flow Service | `GET <flow_url>/v1/flows/{flowId}?docType=Metadata` |
+| receive | Flow Service | `POST <flow_url>/v1/flows/search`, then `GET <flow_url>/v1/flows/{flowId}?docType=Original` |
+| lookup | Directory Service | `POST <directory_url>/v1/directory-line/search` |
+| notify | - | the platform's call to the application's webhook |
 
 ## Installation
 
@@ -33,6 +44,17 @@ implements XP Z12-013: its addresses, an OAuth 2.0 client.
   one), and whether the webhook's HMAC is computed over the fingerprint's bytes or its
   hexadecimal form - both are accepted (below).
 
+## Credentials
+
+From the platform the company signed with (the list of approved platforms:
+[impots.gouv.fr](https://www.impots.gouv.fr/je-consulte-la-liste-des-plateformes-agreees)):
+
+- the Flow Service's and the Directory Service's root addresses (`flow_url`, `directory_url`);
+- an OAuth 2.0 client for the client credentials grant: its token endpoint, id and secret, and a
+  scope when the platform asks one;
+- under a delegation (an accountant acting for its clients), the company's `Organization-Id`;
+- for webhooks, the signing key the platform answers when the webhook is created.
+
 ## Options
 
 | Option | Default | |
@@ -49,6 +71,21 @@ implements XP Z12-013: its addresses, an OAuth 2.0 client.
 
 Each call carries `Authorization: Bearer <token>` (kept until a minute before it lapses, renewed
 once on a 401), a `Request-Id` (a UUID, for the platform's logs) and `Organization-Id` when set.
+
+## Capabilities
+
+| Request | Supported |
+|---|---|
+| `Submit` | yes: Factur-X, UBL, CII (100 MB, said not enforced) |
+| `FetchStatus` | yes: the acknowledgement |
+| `Receive` | yes |
+| `SetStatus` | yes, with the application's CDAR file |
+| `Lookup` | only with `directory_url` |
+| `Report` | yes: FRR |
+| `Notify` | only with `webhook_key` |
+
+`capabilities()`: Factur-X, UBL, CII, CDAR, FRR; approved platform; public sector (an approved
+platform reaches public entities too); 100 MB.
 
 ## Operations
 
@@ -86,6 +123,90 @@ The OpenAPI does not say whether the HMAC covers the fingerprint's 32 bytes or i
 characters: both are accepted, each still needing the key. A callback older than
 `webhook_tolerance` is refused. Answer 200 quickly, and `receive()` out of the request.
 
+## Example
+
+```php
+<?php
+
+require __DIR__.'/vendor/autoload.php';
+
+use Omnibill\Afnor\AfnorGatewayFactory;
+use Omnibill\Model\Invoice;
+use Omnibill\Model\Party;
+use Omnibill\Model\Syntax;
+use Symfony\Component\HttpClient\HttpClient;
+
+$platform = (new AfnorGatewayFactory(HttpClient::create()))->create([
+    'flow_url' => getenv('PA_FLOW_URL'),
+    'directory_url' => getenv('PA_DIRECTORY_URL'),
+    'token_url' => getenv('PA_TOKEN_URL'),
+    'client_id' => getenv('PA_CLIENT_ID'),
+    'client_secret' => getenv('PA_CLIENT_SECRET'),
+    'rule' => 'B2B',
+]);
+
+$invoice = new Invoice(file_get_contents('F-2026-042.pdf'), 'F-2026-042.pdf', Syntax::FACTURX, 'F-2026-042', buyer: new Party('Maison Érable', '702042755'), profile: 'Basic');
+$flow = $platform->submit($invoice, 'order-1234');                   // PENDING: keep $flow->reference
+$flow = $platform->fetchStatus($flow);                               // ACCEPTED, DEPOSITED (200) - or REJECTED with errors
+$inbox = $platform->receive($cursor);                                // suppliers' invoices, statuses of the company's own
+$lines = $platform->lookup('702042755');                             // where the buyer receives
+```
+
+Run on 2026-10-26 on a `MockHttpClient` serving this package's fixtures (the harness's
+`recorded.php`), PHP 8.4, no network - the requests (`>`) and what each call answered:
+
+```
+submit
+  > POST https://auth.pa.example/auth-service/acme/token
+  > POST https://api.flow.pa.example/flow-service/v1/flows
+  8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b pending invoice order-42
+fetchStatus
+  > GET https://api.flow.pa.example/flow-service/v1/flows/8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b?docType=Metadata
+  accepted deposited, history: deposited (200)
+receive
+  > POST https://api.flow.pa.example/flow-service/v1/flows/search
+  > GET https://api.flow.pa.example/flow-service/v1/flows/c1a2b3c4-d5e6-4f70-8a9b-0c1d2e3f4a5b?docType=Original
+  > GET https://api.flow.pa.example/flow-service/v1/flows/d2b3c4d5-e6f7-4a80-9b0c-1d2e3f4a5b6c?docType=Original
+  invoice in FA-77.xml -
+  lifecycle in - F-2026-042 paid 212
+  cursor 'eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0wOFQwOTowMDowMFoiLCJpZCI6MTIzNH0=', more true
+lookup
+  > POST https://api.directory.pa.example/directory-service/v1/directory-line/search
+  702042755 - 702042755 WK Enabled
+  702042755 70204275500240 702042755_70204275500240_ACHATS WK Upcoming
+```
+
+(the recorded answer's `trackingId` is `order-42`.) The rest - report, setStatus, a signed webhook:
+[the manual's usage pages](https://github.com/glitchr-omnisense/omnibill/blob/1.x/docs/usage-submitting.md). In Symfony:
+
+```yaml
+omnibill:
+    gateways:
+        platform:
+            factory: afnor
+            options:
+                flow_url: '%env(PA_FLOW_URL)%'
+                directory_url: '%env(PA_DIRECTORY_URL)%'
+                token_url: '%env(PA_TOKEN_URL)%'
+                client_id: '%env(PA_CLIENT_ID)%'
+                client_secret: '%env(PA_CLIENT_SECRET)%'
+                webhook_key: '%env(default::PA_WEBHOOK_KEY)%'
+```
+
+## Errors
+
+| Answer | Exception |
+|---|---|
+| the token endpoint's 400, 401, 403, or no `access_token` | `InvalidKeyException` |
+| 401 | the token forgotten and asked again once; a second 401 `InvalidKeyException` |
+| 403 | `InvalidKeyException` (`The platform refused the request (HTTP 403): ...`) |
+| other 4xx | `ProviderException` (`HTTP 422: <errorCode> <errorMessage> - <details>`, `providerCode` the `errorCode`) |
+| 5xx, 429, no answer, a timeout (10 s) | `UnreachableException`: nothing transmitted |
+| a body that is not JSON where JSON is expected | `ProviderException` |
+| a flow without a `flowId` | `ProviderException` |
+| a lookup identifier that is not 9 or 14 digits; a status without its CDAR file | `InvalidConfigException`, before any call |
+| a webhook that does not hold | `InvalidNotificationException` |
+
 ## Verified, and not
 
 | | |
@@ -93,3 +214,12 @@ characters: both are accepted, each still needing the key. A callback older than
 | Against an approved platform | **not verified in real: no account.** Every answer in `Tests/Fixtures` is written from the OpenAPI's schemas, the lifecycle message from Annex 2 |
 | The multipart body, the token, the headers, the cursor, the signature | by the tests, against the OpenAPI |
 | Which routes a given platform implements | unknown until tried: a route it lacks answers an error, thrown as a `ProviderException` |
+
+The package's tests (`Tests/AfnorGatewayTest.php`, 9 tests) pass on 2026-10-26 (PHP 8.4).
+
+## Responsibility
+
+This package is an independent, unofficial client of the XP Z12-013 API: it is not affiliated with,
+endorsed by or sponsored by AFNOR, the FNFE-MPE or any approved platform. Whoever runs it
+complies with the platform's contract and terms and with the reform's obligations; see the README's
+Responsibility section.
