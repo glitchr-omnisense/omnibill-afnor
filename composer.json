@@ -10,7 +10,7 @@
         "plateforme-agreee",
         "omnibill"
     ],
-    "homepage": "https://github.com/glitchr-studio/omnibill-afnor",
+    "homepage": "https://github.com/glitchr-omnisense/omnibill-afnor",
     "license": "MIT",
     "authors": [
         {
@@ -21,7 +21,7 @@
     "require": {
         "php": ">=8.2",
         "ext-dom": "*",
-        "omniscient/omnibill": "^1.0@dev",
+        "omnisense/omnibill": "^1.0@dev",
         "symfony/http-client": "^6.4|^7.0|^8.0"
     },
     "require-dev": {

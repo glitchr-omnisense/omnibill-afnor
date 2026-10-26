@@ -11,7 +11,7 @@ order: 1
 composer require omnibill/afnor
 ```
 
-PHP 8.2 or later, `ext-dom`, `omniscient/omnibill` and `symfony/http-client` (give the factory your
+PHP 8.2 or later, `ext-dom`, `omnisense/omnibill` and `symfony/http-client` (give the factory your
 application's client, a `MockHttpClient` in a test). An account on an approved platform that
 implements XP Z12-013: its addresses, an OAuth 2.0 client.
 

@@ -1,6 +1,6 @@
 # omnibill/afnor
 
-**An approved platform** (plateforme agréée) for [omniscient/omnibill](https://github.com/glitchr-studio/omnibill),
+**An approved platform** (plateforme agréée) for [omnisense/omnibill](https://github.com/glitchr-omnisense/omnibill),
 through the standard API of **XP Z12-013** - one package for every platform that implements it,
 told apart by its addresses and credentials: its Flow Service (invoices, lifecycle messages and
 e-reporting files as flows, their acknowledgement, what comes in, webhooks) and its Directory
