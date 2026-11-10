@@ -14,6 +14,7 @@ use Omnibill\GatewayFactory;
 use Omnibill\Http\ClientCredentials;
 use Omnibill\Model\Capabilities;
 use Omnibill\Model\Syntax;
+use Omnisense\Contracts\Policy\UsagePolicy;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -40,8 +41,16 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  */
 final class AfnorGatewayFactory extends GatewayFactory
 {
+    private static ?UsagePolicy $policy = null;
+
     public function __construct(private readonly ?HttpClientInterface $http = null)
     {
+    }
+
+    /** Its usage policy, as policy.json declares it (read once). */
+    public static function usagePolicy(): UsagePolicy
+    {
+        return self::$policy ??= UsagePolicy::fromFile(__DIR__.'/policy.json');
     }
 
     protected function populateConfig(Config $config): void
@@ -58,13 +67,13 @@ final class AfnorGatewayFactory extends GatewayFactory
             'profile' => null,
             'rule' => null,
             // The Flow Service takes a file of 100 MB at most.
-            'omnibill.capabilities' => new Capabilities([Syntax::FACTURX, Syntax::UBL, Syntax::CII, Syntax::CDAR, Syntax::FRR], approved: true, publicSector: true, maxSize: 100 * 1024 * 1024),
+            'omnibill.capabilities' => new Capabilities([Syntax::FACTURX, Syntax::UBL, Syntax::CII, Syntax::CDAR, Syntax::FRR], approved: true, publicSector: true, maxSize: 100 * 1024 * 1024, policy: self::usagePolicy()),
             'omnibill.api' => function (Config $c): Api {
                 $http = $this->http ?? HttpClient::create();
 
                 return new Api(
                     $http,
-                    new ClientCredentials($http, Api::PROVIDER, (string) $c['token_url'], (string) $c['client_id'], (string) $c['client_secret'], $c->get('scope') ?: null),
+                    new ClientCredentials($http, Api::PROVIDER, (string) $c['token_url'], (string) $c['client_id'], (string) $c['client_secret'], $c->get('scope') ?: null, null, $c->backoff()),
                     rtrim((string) $c['flow_url'], '/'),
                     $c->get('directory_url') ? rtrim((string) $c['directory_url'], '/') : null,
                     $c->get('organization_id') ?: null,
@@ -72,6 +81,7 @@ final class AfnorGatewayFactory extends GatewayFactory
                     (int) $c['webhook_tolerance'],
                     $c->get('profile') ?: null,
                     $c->get('rule') ?: null,
+                    backoff: $c->backoff(),
                 );
             },
             'omnibill.action.submit' => new SubmitAction(),

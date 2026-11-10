@@ -1,0 +1,27 @@
+{
+    "$schema": "https://github.com/glitchr-omnisense/contracts/blob/1.x/resources/usage-policy.schema.json",
+    "provider": "afnor",
+    "rateLimits": null,
+    "rights": {
+        "commercial": "unknown",
+        "openSourceRequired": null,
+        "caching": {
+            "permission": "unknown"
+        },
+        "storage": "unknown",
+        "redistribution": "unknown",
+        "attribution": {
+            "required": false
+        }
+    },
+    "requirements": {
+        "key": true
+    },
+    "provenance": {
+        "terms": "https://www.impots.gouv.fr/je-consulte-la-liste-des-plateformes-agreees",
+        "policy": "https://www.impots.gouv.fr/factures-norme-afnor",
+        "notes": "XP Z12-013 is the API standard every approved platform (plateforme agréée) exposes; the rights, limits and prices are each platform's, in its contract with the company, and none is declared here. A site tightens this policy with its platform's figures (the gateway's 'policy' option). The Flow Service takes files of 100 MB at most.",
+        "verifiedAt": "2026-11-10",
+        "declaredBy": "maintainer"
+    }
+}

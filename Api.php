@@ -15,6 +15,7 @@ use Omnibill\Model\FlowState;
 use Omnibill\Model\LifecycleStatus;
 use Omnibill\Model\StatusChange;
 use Omnibill\Model\Syntax;
+use Omnisense\Contracts\Policy\Backoff;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
@@ -39,6 +40,7 @@ final class Api
         public readonly ?string $profile = null,
         public readonly ?string $rule = null,
         private readonly ?\Closure $clock = null,
+        private readonly ?Backoff $backoff = null,
     ) {
     }
 
@@ -51,7 +53,7 @@ final class Api
     {
         for ($attempt = 0; ; ++$attempt) {
             $headers = ['Authorization' => 'Bearer '.$this->credentials->token(), 'Request-Id' => self::uuid()] + ($this->organizationId ? ['Organization-Id' => $this->organizationId] : []);
-            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + ($options['headers'] ?? [])] + $options);
+            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + ($options['headers'] ?? [])] + $options, $this->backoff);
             if (401 === $answer->status && 0 === $attempt) {
                 $this->credentials->reset();
                 continue;

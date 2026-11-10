@@ -30,6 +30,12 @@ DGFiP's external specifications (Annex 2, Flux 6). **Not verified against a plat
 [Documentation](docs/index.md): the sources and what is missing from them, the options, each
 operation and its route, the webhooks' signature, what was verified.
 
+## Usage policy
+
+Its rate limits, rights and prices are each approved platform's, in its contract: `policy.json`
+declares them unknown and a key required. Tighten it with your platform's figures in the gateway's
+`policy` option (see the core's [usage policies](https://github.com/glitchr-omnisense/omnibill/blob/1.x/docs/policies.md)).
+
 ## Responsibility
 
 This package is an independent, unofficial client: it is not affiliated with, endorsed by or
