@@ -8,8 +8,10 @@ use Omnibill\Afnor\Data;
 use Omnibill\Exception\InvalidConfigException;
 use Omnibill\Exception\InvalidKeyException;
 use Omnibill\Exception\InvalidNotificationException;
+use Omnibill\Exception\OutcomeUnknownException;
 use Omnibill\Exception\ProviderException;
 use Omnibill\Exception\UnreachableException;
+use Omnibill\FlowLookupInterface;
 use Omnibill\GatewayInterface;
 use Omnibill\Model\Direction;
 use Omnibill\Model\EReport;
@@ -22,6 +24,7 @@ use Omnibill\Model\StatusChange;
 use Omnibill\Model\Syntax;
 use Omnibill\Request\Lookup;
 use Omnibill\Request\Notify;
+use Omnibill\Request\Receive;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -245,6 +248,62 @@ final class AfnorGatewayTest extends TestCase
         }
         $this->expectException(UnreachableException::class);
         $this->gateway(['POST /v1/flows' => new MockResponse('', ['http_code' => 503])])->submit(self::invoice());
+    }
+
+    public function testAWriteWhoseOutcomeIsUnknownIsToldApartAndFoundAgainByItsTrackingId(): void
+    {
+        foreach (['a 5xx after the body went' => new MockResponse('', ['http_code' => 503]), 'a timeout' => new MockResponse('', ['error' => 'Idle timeout reached for "https://api.flow.pa.example/flow-service/v1/flows".'])] as $case => $answer) {
+            try {
+                $this->gateway(['POST /v1/flows' => $answer])->submit(self::invoice(), 'order-42');
+                self::fail($case);
+            } catch (OutcomeUnknownException $e) {
+                self::assertInstanceOf(UnreachableException::class, $e, 'the catches written before still match');
+            }
+        }
+        try {
+            $this->gateway(['POST /v1/flows' => new MockResponse('', ['error' => 'Could not resolve host: api.flow.pa.example'])])->submit(self::invoice(), 'order-42');
+            self::fail();
+        } catch (UnreachableException $e) {
+            self::assertNotInstanceOf(OutcomeUnknownException::class, $e, 'a write that never left');
+        }
+        try {
+            self::lookup($this->gateway(['POST /v1/flows/search' => new MockResponse('', ['http_code' => 503])]))->findFlow('order-42');
+            self::fail();
+        } catch (UnreachableException $e) {
+            self::assertNotInstanceOf(OutcomeUnknownException::class, $e, 'a search sent as a POST writes nothing');
+        }
+
+        $this->calls = [];
+        $gateway = $this->gateway(['POST /v1/flows/search' => 'flow-search-tracking.json']);
+        self::assertTrue($gateway->supports(\Omnibill\Request\FindFlow::class));
+        $flow = self::lookup($gateway)->findFlow('order-42');
+        self::assertSame(['8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b', FlowState::ACCEPTED, LifecycleStatus::DEPOSITED, 'order-42'], [$flow?->reference, $flow?->state, $flow?->status, $flow?->trackingId], 'the one not rejected');
+        self::assertSame(['limit' => 100, 'where' => ['trackingId' => 'order-42', 'flowDirection' => ['Out']]], json_decode($this->body(0), true));
+
+        self::assertNull(self::lookup($this->gateway(['POST /v1/flows/search' => new MockResponse('{"limit":100,"results":[]}')]))->findFlow('order-43'));
+    }
+
+    private static function lookup(GatewayInterface $gateway): FlowLookupInterface
+    {
+        self::assertInstanceOf(FlowLookupInterface::class, $gateway);
+
+        return $gateway;
+    }
+
+    public function testAReaderTakesOnlyTheKindsItAsksForAndDownloadsNothingElse(): void
+    {
+        $gateway = $this->gateway([
+            'POST /v1/flows/search' => 'flow-search.json',
+            'GET d2b3c4d5-e6f7-4a80-9b0c-1d2e3f4a5b6c?Original' => 'cdar-212.xml',
+        ]);
+        $inbox = $gateway->execute(new Receive(null, 25, [FlowKind::LIFECYCLE]))->getInbox();
+        self::assertNotNull($inbox);
+
+        self::assertSame(['where' => ['flowDirection' => ['In'], 'flowType' => ['CustomerInvoiceLC', 'SupplierInvoiceLC']]], array_intersect_key((array) json_decode($this->body(0), true), ['where' => 1]));
+        self::assertCount(2, $this->calls(), 'the search, and the lifecycle message only: the invoice the platform answered anyway is not downloaded');
+        self::assertSame([FlowKind::LIFECYCLE], array_map(static fn ($r) => $r->flow->kind, $inbox->items));
+        self::assertSame(LifecycleStatus::PAID, $inbox->statuses()[0]->status);
+        self::assertNotNull($inbox->cursor);
     }
 
     public function testALifecycleMessageWithoutAStatusOfTheReformIsNotOne(): void

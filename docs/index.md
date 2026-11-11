@@ -44,6 +44,24 @@ implements XP Z12-013: its addresses, an OAuth 2.0 client.
   one), and whether the webhook's HMAC is computed over the fingerprint's bytes or its
   hexadecimal form - both are accepted (below).
 
+### Read again on 2026-11-11
+
+The Flow Service's OpenAPI **1.3.0** and **1.4.0** (2026-10-02 SG5 meeting) as a platform
+publishes them on SwaggerHub (`Generixgroup8/AFNOR-Flow_Service`), and the Directory Service's
+1.3.0 (`Generixgroup8/AFNOR-Directory_Service`) - the API files only, not the standard's text:
+
+- the search's criteria (`SearchFlowFilters`): `updatedAfter`, `updatedBefore`, `processingRule`,
+  `flowType`, `flowDirection`, `trackingId` (since 1.0.2), `ackStatus` - so `findFlow()` and
+  `receive()`'s kinds;
+- **no criterion on the invoice**, and a `Flow` carries no link to the invoice a lifecycle flow is
+  about: `fetchStatus()` cannot gather the buyer's statuses of one invoice without downloading every
+  lifecycle flow. It stays the acknowledgement; the buyer's statuses come through `receive()`
+  (`kinds: [LIFECYCLE]`), each read for its invoice's number;
+- a directory line has no scheme field: `Addressing::$scheme` is `0225`;
+- 1.4.0 renames e-reporting flow types (`StateTransactionReport` into
+  `StateCustomerTransactionReport`, `StateSupplierTransactionReport`): the package filters on the
+  invoices' and their lifecycles' types only, the same in both.
+
 ## Credentials
 
 From the platform the company signed with (the list of approved platforms:
@@ -78,10 +96,11 @@ once on a 401), a `Request-Id` (a UUID, for the platform's logs) and `Organizati
 |---|---|
 | `Submit` | yes: Factur-X, UBL, CII (100 MB, said not enforced) |
 | `FetchStatus` | yes: the acknowledgement |
-| `Receive` | yes |
+| `Receive` | yes; its `kinds` as `where.flowType` (since omnibill 1.2) |
 | `SetStatus` | yes, with the application's CDAR file |
 | `Lookup` | only with `directory_url` |
 | `Report` | yes: FRR |
+| `FindFlow` | yes (since omnibill 1.2): `where.trackingId` |
 | `Notify` | only with `webhook_key` |
 
 `capabilities()`: Factur-X, UBL, CII, CDAR, FRR; approved platform; public sector (an approved
@@ -96,6 +115,7 @@ platform reaches public entities too); 100 MB.
 | `receive()` | `POST /v1/flows/search` (`where.flowDirection: [In]`, `limit`, `cursor`), then `GET /v1/flows/{flowId}?docType=Original` for each | an invoice (Factur-X, UBL, CII) as an `Invoice`; a lifecycle message (CDAR) read as a `StatusChange`; the `nextCursor` |
 | `setStatus()` | `POST /v1/flows`, `flowSyntax: CDAR` | the application's CDAR file (`StatusChange::$file`): an `InvalidConfigException` without one |
 | `report()` | `POST /v1/flows`, `flowSyntax: FRR` | |
+| `findFlow()` | `POST /v1/flows/search`, `where: {trackingId, flowDirection: [Out]}`, `limit` 100 | the flow sent with that key - the one not rejected, the earliest submitted, when there are several; none: `null` |
 | `lookup()` | `POST /v1/directory-line/search`, `filters.siren` or `filters.siret` (`op: strict`), `include: [siren, siret, routingCode]` | `list<Addressing>`; 204: none |
 | `notify()` | a webhook's call | its `Afnor-Signature` checked; the `Flow` it carries |
 
@@ -201,7 +221,8 @@ omnibill:
 | 401 | the token forgotten and asked again once; a second 401 `InvalidKeyException` |
 | 403 | `InvalidKeyException` (`The platform refused the request (HTTP 403): ...`) |
 | other 4xx | `ProviderException` (`HTTP 422: <errorCode> <errorMessage> - <details>`, `providerCode` the `errorCode`) |
-| 5xx, 429, no answer, a timeout (10 s) | `UnreachableException`: nothing transmitted |
+| a 5xx or a timeout (10 s) after `POST /v1/flows` (submit, setStatus, report) | `OutcomeUnknownException` (an `UnreachableException`): the flow may be there - `findFlow($trackingId)` before submitting again |
+| 5xx, 429, no answer, a timeout to a read (the searches, the downloads, the token); a host that did not resolve, a connection refused | `UnreachableException`: nothing transmitted |
 | a body that is not JSON where JSON is expected | `ProviderException` |
 | a flow without a `flowId` | `ProviderException` |
 | a lookup identifier that is not 9 or 14 digits; a status without its CDAR file | `InvalidConfigException`, before any call |

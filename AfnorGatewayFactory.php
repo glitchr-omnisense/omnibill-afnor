@@ -3,6 +3,7 @@
 namespace Omnibill\Afnor;
 
 use Omnibill\Afnor\Action\FetchStatusAction;
+use Omnibill\Afnor\Action\FindFlowAction;
 use Omnibill\Afnor\Action\LookupAction;
 use Omnibill\Afnor\Action\NotifyAction;
 use Omnibill\Afnor\Action\ReceiveAction;
@@ -89,6 +90,7 @@ final class AfnorGatewayFactory extends GatewayFactory
             'omnibill.action.receive' => new ReceiveAction(),
             'omnibill.action.set_status' => new SetStatusAction(),
             'omnibill.action.report' => new ReportAction(),
+            'omnibill.action.find_flow' => new FindFlowAction(),
             'omnibill.action.lookup' => static fn (Config $c) => $c->get('directory_url') ? new LookupAction() : null,
             'omnibill.action.notify' => static fn (Config $c) => $c->get('webhook_key') ? new NotifyAction() : null,
         ]);

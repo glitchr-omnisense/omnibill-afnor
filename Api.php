@@ -46,15 +46,27 @@ final class Api
     }
 
     /**
+     * The flowTypes of the Flow Service's search (OpenAPI 1.3.0, FlowType)
+     * each kind of flow received is: an invoice (a supplier's, or a
+     * self-billed one), a lifecycle message about one. The other kinds have
+     * none to filter on.
+     */
+    public const FLOW_TYPES = [
+        'invoice' => ['SupplierInvoice', 'CustomerInvoice'],
+        'lifecycle' => ['CustomerInvoiceLC', 'SupplierInvoiceLC'],
+    ];
+
+    /**
      * A call to the platform, the token renewed once when it is refused.
      *
      * @param array<string, mixed> $options
+     * @param bool|null            $write   whether it writes (Answer::send()): null by its method, false for a search sent as a POST
      */
-    public function call(string $method, string $url, array $options = []): Answer
+    public function call(string $method, string $url, array $options = [], ?bool $write = null): Answer
     {
         for ($attempt = 0; ; ++$attempt) {
             $headers = ['Authorization' => 'Bearer '.$this->credentials->token(), 'Request-Id' => self::uuid()] + ($this->organizationId ? ['Organization-Id' => $this->organizationId] : []);
-            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + Data::map($options['headers'] ?? [])] + $options, $this->backoff);
+            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + Data::map($options['headers'] ?? [])] + $options, $this->backoff, $write);
             if (401 === $answer->status && 0 === $attempt) {
                 $this->credentials->reset();
                 continue;
@@ -108,17 +120,34 @@ final class Api
     }
 
     /**
-     * POST /v1/flows/search: the flows received, from the cursor.
+     * POST /v1/flows/search: the flows received, from the cursor - of the
+     * flowTypes given, when some are.
+     *
+     * @param list<string> $flowTypes
      *
      * @return array{results: list<array<string, mixed>>, nextCursor: ?string}
      */
-    public function search(?string $cursor, int $limit): array
+    public function search(?string $cursor, int $limit, array $flowTypes = []): array
     {
-        $data = $this->call('POST', $this->flowUrl.'/v1/flows/search', ['json' => array_filter(['limit' => max(1, min(100, $limit)), 'cursor' => $cursor, 'where' => ['flowDirection' => ['In']]], static fn ($v) => null !== $v)])->json();
+        $where = ['flowDirection' => ['In']] + ($flowTypes ? ['flowType' => $flowTypes] : []);
+        $data = $this->call('POST', $this->flowUrl.'/v1/flows/search', ['json' => array_filter(['limit' => max(1, min(100, $limit)), 'cursor' => $cursor, 'where' => $where], static fn ($v) => null !== $v)], false)->json();
 
         $next = $data['nextCursor'] ?? null;
 
         return ['results' => array_map(Data::map(...), array_values((array) ($data['results'] ?? []))), 'nextCursor' => null !== $next && '' !== $next ? Data::cast($next) : null];
+    }
+
+    /**
+     * POST /v1/flows/search on a trackingId (a criterion since OpenAPI
+     * 1.0.2), in one direction: the flows the platform has with it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchByTrackingId(string $trackingId, string $direction = 'Out'): array
+    {
+        $data = $this->call('POST', $this->flowUrl.'/v1/flows/search', ['json' => ['limit' => 100, 'where' => ['trackingId' => $trackingId, 'flowDirection' => [$direction]]]], false)->json();
+
+        return array_values(array_filter(array_map(Data::map(...), array_values((array) ($data['results'] ?? []))), static fn (array $flow) => Data::cast($flow['trackingId'] ?? '') === $trackingId));
     }
 
     /**
@@ -133,7 +162,7 @@ final class Api
         $answer = $this->call('POST', rtrim((string) $this->directoryUrl, '/').'/v1/directory-line/search', ['json' => [
             'filters' => [$field => ['op' => 'strict', 'value' => $identifier]],
             'include' => ['siren', 'siret', 'routingCode'],
-        ]]);
+        ]], false);
         if (204 === $answer->status || '' === trim($answer->body)) {
             return [];
         }
