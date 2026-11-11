@@ -3,6 +3,7 @@
 namespace Omnibill\Afnor\Action;
 
 use Omnibill\Afnor\Api;
+use Omnibill\Afnor\Data;
 use Omnibill\Model\Direction;
 use Omnibill\Model\Event;
 use Omnibill\Model\Notification;
@@ -29,7 +30,7 @@ final class NotifyAction extends AbstractAction
             Direction::IN === $flow->direction ? Event::RECEIVED : Event::FLOW_UPDATED,
             $flow,
             $flow->updatedAt,
-            $flow->reference.'@'.($data['updatedAt'] ?? $request->header('Afnor-Signature-Timestamp')),
+            $flow->reference.'@'.Data::cast($data['updatedAt'] ?? $request->header('Afnor-Signature-Timestamp')),
             $data,
         ));
     }

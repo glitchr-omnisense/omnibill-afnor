@@ -4,6 +4,7 @@ namespace Omnibill\Afnor\Tests;
 
 use Omnibill\Afnor\AfnorGatewayFactory;
 use Omnibill\Afnor\Api;
+use Omnibill\Afnor\Data;
 use Omnibill\Exception\InvalidConfigException;
 use Omnibill\Exception\InvalidKeyException;
 use Omnibill\Exception\InvalidNotificationException;
@@ -43,10 +44,13 @@ final class AfnorGatewayTest extends TestCase
         'webhook_key' => 'c2lnbmluZy1rZXktb2YtdGhlLXdlYmhvb2stMzItYnl0ZXM=',
     ];
 
-    /** @var list<array{string, string, array<string, mixed>}> */
+    /** @var list<array{string, string, array<array-key, mixed>}> */
     private array $calls = [];
 
-    /** @param array<string, string|MockResponse> $routes "METHOD path" (#n to answer it again) => a fixture or a response */
+    /**
+     * @param array<string, string|MockResponse> $routes  "METHOD path" (#n to answer it again) => a fixture or a response
+     * @param array<string, mixed>               $options
+     */
     private function gateway(array $routes, array $options = []): GatewayInterface
     {
         $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$routes): MockResponse {
@@ -56,9 +60,10 @@ final class AfnorGatewayTest extends TestCase
                 return new MockResponse((string) file_get_contents(__DIR__.'/Fixtures/token.json'));
             }
             parse_str((string) parse_url($url, \PHP_URL_QUERY), $query);
+            $docType = $query['docType'] ?? null;
             foreach ($routes as $route => $answer) {
                 [$m, $p] = explode(' ', (string) preg_replace('~#\d+$~', '', $route), 2);
-                if ($m === $method && str_ends_with($path.(isset($query['docType']) ? '?'.$query['docType'] : ''), $p)) {
+                if ($m === $method && str_ends_with($path.(\is_string($docType) ? '?'.$docType : ''), $p)) {
                     unset($routes[$route]);
                     if ($answer instanceof MockResponse) {
                         return $answer;
@@ -75,10 +80,19 @@ final class AfnorGatewayTest extends TestCase
         return (new AfnorGatewayFactory($http))->create($options + self::OPTIONS);
     }
 
-    /** @return list<array{string, string, array<string, mixed>}> the calls but the token's */
+    /** @return list<array{string, string, array<array-key, mixed>}> the calls but the token's */
     private function calls(): array
     {
         return array_values(array_filter($this->calls, static fn (array $c) => !str_ends_with((string) parse_url($c[1], \PHP_URL_PATH), '/token')));
+    }
+
+    /** The body of the nth call but the token's. */
+    private function body(int $n): string
+    {
+        $body = $this->calls()[$n][2]['body'] ?? null;
+        self::assertIsString($body);
+
+        return $body;
     }
 
     private static function invoice(): Invoice
@@ -93,12 +107,13 @@ final class AfnorGatewayTest extends TestCase
         self::assertSame(['8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b', FlowState::PENDING, FlowKind::INVOICE, Direction::OUT, 'order-42', 'F-2026-042', null], [$flow->reference, $flow->state, $flow->kind, $flow->direction, $flow->trackingId, $flow->invoiceNumber, $flow->status]);
         [$method, $url, $options] = $this->calls()[0];
         self::assertSame(['POST', 'https://api.flow.pa.example/flow-service/v1/flows'], [$method, $url]);
-        $headers = implode("\n", $options['headers']);
+        self::assertIsArray($options['headers']);
+        $headers = implode("\n", array_map(Data::cast(...), $options['headers']));
         self::assertStringContainsString('Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.example.signature', $headers);
         self::assertStringContainsString('Organization-Id: 123456789', $headers);
         self::assertMatchesRegularExpression('~Content-Type: multipart/form-data; boundary=(omnibill-[0-9a-f]+)~', $headers);
         preg_match('~boundary=(omnibill-[0-9a-f]+)~', $headers, $m);
-        $parts = explode('--'.$m[1], (string) $options['body']);
+        $parts = explode('--'.($m[1] ?? ''), $this->body(0));
         self::assertStringContainsString("Content-Disposition: form-data; name=\"flowInfo\"\r\nContent-Type: application/json", $parts[1]);
         $info = json_decode(trim(explode("\r\n\r\n", $parts[1], 2)[1]), true);
         self::assertSame(['trackingId' => 'order-42', 'name' => 'F-2026-042.pdf', 'processingRule' => 'B2B', 'flowSyntax' => 'Factur-X', 'flowProfile' => 'Extended-CTC-FR', 'sha256' => hash('sha256', '%PDF-1.7 Factur-X')], $info);
@@ -131,7 +146,7 @@ final class AfnorGatewayTest extends TestCase
         self::assertCount(2, $inbox->items);
         self::assertTrue($inbox->more);
         self::assertSame('eyJjcmVhdGVkX2F0IjoiMjAyNi0xMC0wOFQwOTowMDowMFoiLCJpZCI6MTIzNH0=', $inbox->cursor);
-        self::assertSame(['limit' => 25, 'cursor' => 'previous-cursor', 'where' => ['flowDirection' => ['In']]], json_decode((string) $this->calls()[0][2]['body'], true));
+        self::assertSame(['limit' => 25, 'cursor' => 'previous-cursor', 'where' => ['flowDirection' => ['In']]], json_decode($this->body(0), true));
 
         $invoice = $inbox->invoices()[0];
         self::assertSame(['FA-77.xml', Syntax::CII, 'B2B', 'CIUS'], [$invoice->filename, $invoice->syntax, $invoice->rule, $invoice->profile]);
@@ -149,9 +164,9 @@ final class AfnorGatewayTest extends TestCase
         $flow = $gateway->setStatus(new StatusChange(LifecycleStatus::PAID, 'F-2026-042', amount: '1250.00', file: $cdar));
 
         self::assertSame([FlowKind::LIFECYCLE, LifecycleStatus::PAID], [$flow->kind, $flow->status]);
-        self::assertStringContainsString('"flowSyntax":"CDAR"', (string) $this->calls()[0][2]['body']);
-        self::assertStringContainsString('filename="CDV-212-F-2026-042.xml"', (string) $this->calls()[0][2]['body']);
-        self::assertStringNotContainsString('processingRule', explode('file', (string) $this->calls()[0][2]['body'])[0]);
+        self::assertStringContainsString('"flowSyntax":"CDAR"', $this->body(0));
+        self::assertStringContainsString('filename="CDV-212-F-2026-042.xml"', $this->body(0));
+        self::assertStringNotContainsString('processingRule', explode('file', $this->body(0))[0]);
 
         $this->expectException(InvalidConfigException::class);
         $gateway->setStatus(new StatusChange(LifecycleStatus::REFUSED, 'F-1'));
@@ -162,11 +177,14 @@ final class AfnorGatewayTest extends TestCase
         $lines = $this->gateway(['POST /v1/directory-line/search' => 'directory-line-search.json'])->lookup('702 042 755');
 
         self::assertSame('https://api.directory.pa.example/directory-service/v1/directory-line/search', $this->calls()[0][1]);
-        self::assertSame(['filters' => ['siren' => ['op' => 'strict', 'value' => '702042755']], 'include' => ['siren', 'siret', 'routingCode']], json_decode((string) $this->calls()[0][2]['body'], true));
+        self::assertSame(['filters' => ['siren' => ['op' => 'strict', 'value' => '702042755']], 'include' => ['siren', 'siret', 'routingCode']], json_decode($this->body(0), true));
         self::assertSame(['702042755', null, '702042755', 'MAISON ERABLE', 'WK', true], [$lines[0]->siren, $lines[0]->siret, $lines[0]->electronicAddress, $lines[0]->name, $lines[0]->platform, $lines[0]->isEnabled()]);
         self::assertSame(['70204275500240', 'ACHATS', false], [$lines[1]->siret, $lines[1]->routingCode, $lines[1]->isEnabled()]);
         self::assertSame([], $this->gateway(['POST /v1/directory-line/search' => new MockResponse('', ['http_code' => 204])])->lookup('70204275500240'));
-        self::assertSame('siret', array_key_first(json_decode((string) $this->calls()[1][2]['body'], true)['filters']));
+        $search = json_decode($this->body(1), true);
+        self::assertIsArray($search);
+        self::assertIsArray($search['filters']);
+        self::assertSame('siret', array_key_first($search['filters']));
 
         $this->expectException(InvalidConfigException::class);
         $this->gateway([])->lookup('not-a-siren');
@@ -177,7 +195,7 @@ final class AfnorGatewayTest extends TestCase
         $flow = $this->gateway(['POST /v1/flows' => 'flow-post-202.json:202'])->report(new EReport('<Report/>', 'TR-2026-10.xml', rule: 'B2C'));
 
         self::assertSame(FlowKind::REPORT, $flow->kind);
-        self::assertStringContainsString('"processingRule":"B2C","flowSyntax":"FRR"', (string) $this->calls()[0][2]['body']);
+        self::assertStringContainsString('"processingRule":"B2C","flowSyntax":"FRR"', $this->body(0));
     }
 
     public function testAWebhooksSignatureIsChecked(): void
@@ -217,7 +235,7 @@ final class AfnorGatewayTest extends TestCase
         $this->calls = [];
         $flow = $this->gateway(['POST /v1/flows' => new MockResponse('{"errorCode":"EXPIRED_TOKEN"}', ['http_code' => 401]), 'POST /v1/flows#2' => 'flow-post-202.json:202'])->submit(self::invoice());
         self::assertSame('8f1d2c3b-4a5e-4f60-9a7b-1c2d3e4f5a6b', $flow->reference);
-        self::assertCount(2, array_filter($this->calls, static fn ($c) => str_ends_with($c[1], '/token')), 'a new token after a 401');
+        self::assertCount(2, array_filter($this->calls, static fn (array $c) => str_ends_with(Data::cast($c[1]), '/token')), 'a new token after a 401');
 
         try {
             $this->gateway(['POST /v1/flows' => 'error-422.json:403'])->submit(self::invoice());

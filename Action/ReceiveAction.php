@@ -3,6 +3,7 @@
 namespace Omnibill\Afnor\Action;
 
 use Omnibill\Afnor\Api;
+use Omnibill\Afnor\Data;
 use Omnibill\Model\FlowKind;
 use Omnibill\Model\Inbox;
 use Omnibill\Model\Invoice;
@@ -36,7 +37,7 @@ final class ReceiveAction extends AbstractAction
                 $status = Api::lifecycle($file, $name);
                 $items[] = new Received($flow->with(status: $status?->status, history: $status ? [$status] : []), status: $status);
             } elseif (FlowKind::INVOICE === $flow->kind) {
-                $items[] = new Received($flow, new Invoice($file, $name, Syntax::tryFrom((string) ($data['flowSyntax'] ?? '')) ?? Syntax::CII, rule: $data['processingRule'] ?? null, profile: $data['flowProfile'] ?? null));
+                $items[] = new Received($flow, new Invoice($file, $name, Syntax::tryFrom(Data::cast($data['flowSyntax'] ?? '')) ?? Syntax::CII, rule: Data::of($data)->textOrNull('processingRule'), profile: Data::of($data)->textOrNull('flowProfile')));
             } else {
                 $items[] = new Received($flow);
             }

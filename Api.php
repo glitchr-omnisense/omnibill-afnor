@@ -29,6 +29,7 @@ final class Api
 {
     public const PROVIDER = 'afnor';
 
+    /** @param (\Closure(): int)|null $clock */
     public function __construct(
         private readonly HttpClientInterface $http,
         private readonly ClientCredentials $credentials,
@@ -53,7 +54,7 @@ final class Api
     {
         for ($attempt = 0; ; ++$attempt) {
             $headers = ['Authorization' => 'Bearer '.$this->credentials->token(), 'Request-Id' => self::uuid()] + ($this->organizationId ? ['Organization-Id' => $this->organizationId] : []);
-            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + ($options['headers'] ?? [])] + $options, $this->backoff);
+            $answer = Answer::send($this->http, self::PROVIDER, $method, $url, ['headers' => $headers + Data::map($options['headers'] ?? [])] + $options, $this->backoff);
             if (401 === $answer->status && 0 === $attempt) {
                 $this->credentials->reset();
                 continue;
@@ -63,7 +64,7 @@ final class Api
             }
             if ($answer->status >= 400) {
                 $error = json_decode($answer->body, true);
-                throw new ProviderException(self::PROVIDER, \sprintf('HTTP %d: %s', $answer->status, self::error($answer)), \is_array($error) ? ($error['errorCode'] ?? null) : (string) $answer->status);
+                throw new ProviderException(self::PROVIDER, \sprintf('HTTP %d: %s', $answer->status, self::error($answer)), \is_array($error) ? Data::of($error)->textOrNull('errorCode') : (string) $answer->status);
             }
 
             return $answer;
@@ -115,7 +116,9 @@ final class Api
     {
         $data = $this->call('POST', $this->flowUrl.'/v1/flows/search', ['json' => array_filter(['limit' => max(1, min(100, $limit)), 'cursor' => $cursor, 'where' => ['flowDirection' => ['In']]], static fn ($v) => null !== $v)])->json();
 
-        return ['results' => array_values((array) ($data['results'] ?? [])), 'nextCursor' => isset($data['nextCursor']) && '' !== $data['nextCursor'] ? (string) $data['nextCursor'] : null];
+        $next = $data['nextCursor'] ?? null;
+
+        return ['results' => array_map(Data::map(...), array_values((array) ($data['results'] ?? []))), 'nextCursor' => null !== $next && '' !== $next ? Data::cast($next) : null];
     }
 
     /**
@@ -137,15 +140,16 @@ final class Api
 
         $lines = [];
         foreach ((array) ($answer->json()['results'] ?? []) as $line) {
+            $read = Data::of($line);
             $lines[] = new Addressing(
-                siren: (string) ($line['siren'] ?? $line['legalUnit']['siren'] ?? ''),
-                siret: $line['siret'] ?? $line['facility']['siret'] ?? null,
-                routingCode: $line['routingIdentifier'] ?? $line['routingCode']['routingIdentifier'] ?? null,
-                electronicAddress: $line['addressingIdentifier'] ?? null,
-                name: $line['legalUnit']['businessName'] ?? null,
-                platform: $line['platformType'] ?? null,
-                status: $line['directoryLineStatus'] ?? null,
-                data: $line,
+                siren: $read->textOrNull('siren') ?? $read->text('legalUnit.siren'),
+                siret: $read->textOrNull('siret') ?? $read->textOrNull('facility.siret'),
+                routingCode: $read->textOrNull('routingIdentifier') ?? $read->textOrNull('routingCode.routingIdentifier'),
+                electronicAddress: $read->textOrNull('addressingIdentifier'),
+                name: $read->textOrNull('legalUnit.businessName'),
+                platform: $read->textOrNull('platformType'),
+                status: $read->textOrNull('directoryLineStatus'),
+                data: Data::map($line),
             );
         }
 
@@ -184,7 +188,7 @@ final class Api
         }
         $flow = json_decode($body, true);
 
-        return \is_array($flow) ? $flow : throw new InvalidNotificationException(self::PROVIDER, 'The callback is not a JSON flow.');
+        return \is_array($flow) ? Data::map($flow) : throw new InvalidNotificationException(self::PROVIDER, 'The callback is not a JSON flow.');
     }
 
     /**
@@ -202,8 +206,9 @@ final class Api
             'Error' => FlowState::REJECTED,
             default => FlowState::PENDING,
         };
-        $syntax = (string) ($flow['flowSyntax'] ?? '');
-        $type = (string) ($flow['flowType'] ?? '');
+        $read = Data::of($flow);
+        $syntax = $read->text('flowSyntax');
+        $type = $read->text('flowType');
         $kind = match (true) {
             'CDAR' === $syntax || str_ends_with($type, 'LC') => FlowKind::LIFECYCLE,
             'FRR' === $syntax || str_contains($type, 'Report') => FlowKind::REPORT,
@@ -216,22 +221,22 @@ final class Api
             FlowState::REJECTED => LifecycleStatus::REJECTED,
             default => null,
         } : null;
-        $errors = array_map(static fn (array $d) => trim(\sprintf('%s: %s%s', $d['reasonCode'] ?? '?', $d['reasonMessage'] ?? '', isset($d['item']) && '' !== $d['item'] ? ' ('.$d['item'].')' : '')), array_values(array_filter((array) ($ack['details'] ?? []), 'is_array')));
+        $errors = array_map(static fn (array $d) => trim(\sprintf('%s: %s%s', Data::cast($d['reasonCode'] ?? '?'), Data::cast($d['reasonMessage'] ?? ''), isset($d['item']) && '' !== $d['item'] ? ' ('.Data::cast($d['item']).')' : '')), array_values(array_filter((array) ($ack['details'] ?? []), 'is_array')));
         $updatedAt = self::date($flow['updatedAt'] ?? null);
 
         return new Flow(
-            reference: (string) ($flow['flowId'] ?? throw new ProviderException(self::PROVIDER, 'A flow without a flowId.')),
+            reference: Data::cast($flow['flowId'] ?? throw new ProviderException(self::PROVIDER, 'A flow without a flowId.')),
             kind: $kind,
             direction: $direction,
             state: $state,
-            trackingId: $flow['trackingId'] ?? null,
+            trackingId: $read->textOrNull('trackingId'),
             invoiceNumber: $invoiceNumber,
             submittedAt: self::date($flow['submittedAt'] ?? null),
             updatedAt: $updatedAt,
             status: $status,
             history: null !== $status ? [new StatusChange($status, $invoiceNumber, $updatedAt, $errors ? implode('; ', $errors) : null, code: (string) $status->code())] : [],
             errors: $errors,
-            name: $flow['name'] ?? null,
+            name: $read->textOrNull('name'),
             data: $flow,
         );
     }
@@ -250,7 +255,12 @@ final class Api
             return null;
         }
         $xpath = new \DOMXPath($dom);
-        $first = static fn (string $query): ?string => ($node = $xpath->query($query)?->item(0)) ? trim($node->textContent) : null;
+        $first = static function (string $query) use ($xpath): ?string {
+            $nodes = $xpath->query($query);
+            $node = false !== $nodes ? $nodes->item(0) : null;
+
+            return $node instanceof \DOMNode ? trim($node->textContent) : null;
+        };
         $reference = "//*[local-name()='AcknowledgementDocument']/*[local-name()='ReferenceReferencedDocument']";
         $code = $first($reference."/*[local-name()='ProcessConditionCode']");
         $status = null !== $code ? LifecycleStatus::fromCode($code) : null;
@@ -277,7 +287,7 @@ final class Api
     {
         $error = json_decode($answer->body, true);
         if (\is_array($error)) {
-            return trim(($error['errorCode'] ?? '').' '.($error['errorMessage'] ?? '').(isset($error['details']) ? ' - '.$error['details'] : ''));
+            return trim(Data::cast($error['errorCode'] ?? '').' '.Data::cast($error['errorMessage'] ?? '').(isset($error['details']) ? ' - '.Data::cast($error['details']) : ''));
         }
 
         return mb_substr(trim($answer->body), 0, 200) ?: 'no reason given';

@@ -27,6 +27,6 @@ final class SetStatusAction extends AbstractAction
         $name = $change->filename ?? \sprintf('CDV-%s-%s.xml', $change->status->code() ?? $change->status->value, preg_replace('~[^A-Za-z0-9_-]+~', '-', (string) $change->invoiceNumber));
         $info = $this->api->submit($file, $name, Syntax::CDAR, null, null, null);
         $flow = Api::flow(['flowSyntax' => 'CDAR', 'flowDirection' => 'Out', 'acknowledgement' => ['status' => 'Pending']] + $info, $change->invoiceNumber);
-        $request->setResult($flow->with(status: $change->status, history: [...($request->flow?->history ?? []), $change]));
+        $request->setResult($flow->with(status: $change->status, history: [...($request->flow->history ?? []), $change]));
     }
 }

@@ -73,14 +73,14 @@ final class AfnorGatewayFactory extends GatewayFactory
 
                 return new Api(
                     $http,
-                    new ClientCredentials($http, Api::PROVIDER, (string) $c['token_url'], (string) $c['client_id'], (string) $c['client_secret'], $c->get('scope') ?: null, null, $c->backoff()),
-                    rtrim((string) $c['flow_url'], '/'),
-                    $c->get('directory_url') ? rtrim((string) $c['directory_url'], '/') : null,
-                    $c->get('organization_id') ?: null,
-                    $c->get('webhook_key') ?: null,
-                    (int) $c['webhook_tolerance'],
-                    $c->get('profile') ?: null,
-                    $c->get('rule') ?: null,
+                    new ClientCredentials($http, Api::PROVIDER, Data::cast($c['token_url']), Data::cast($c['client_id']), Data::cast($c['client_secret']), $c->string('scope') ?: null, null, $c->backoff()),
+                    rtrim(Data::cast($c['flow_url']), '/'),
+                    $c->get('directory_url') ? rtrim(Data::cast($c['directory_url']), '/') : null,
+                    $c->string('organization_id') ?: null,
+                    $c->string('webhook_key') ?: null,
+                    $c->int('webhook_tolerance'),
+                    $c->string('profile') ?: null,
+                    $c->string('rule') ?: null,
                     backoff: $c->backoff(),
                 );
             },
