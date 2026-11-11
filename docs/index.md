@@ -113,9 +113,9 @@ platform reaches public entities too); 100 MB.
 | `submit()` | `POST /v1/flows`, multipart: `flowInfo` (JSON: trackingId, name, processingRule, flowSyntax, flowProfile, sha256) and `file` | 202: the flow, `PENDING` |
 | `fetchStatus()` | `GET /v1/flows/{flowId}?docType=Metadata` | the acknowledgement: `Pending`, `Ok` (`ACCEPTED`; an invoice sent: `DEPOSITED`, 200), `Error` (`REJECTED`; an invoice sent: `REJECTED`, 213), with its details as errors |
 | `receive()` | `POST /v1/flows/search` (`where.flowDirection: [In]`, `limit`, `cursor`), then `GET /v1/flows/{flowId}?docType=Original` for each | an invoice (Factur-X, UBL, CII) as an `Invoice`; a lifecycle message (CDAR) read as a `StatusChange`; the `nextCursor` |
-| `setStatus()` | `POST /v1/flows`, `flowSyntax: CDAR` | the application's CDAR file (`StatusChange::$file`): an `InvalidConfigException` without one |
+| `setStatus()` | `POST /v1/flows`, `flowSyntax: CDAR`; since omnibill 1.3 the request's `trackingId` in `flowInfo` (`setStatus($change, $flow, $trackingId)`) | the application's CDAR file (`StatusChange::$file`), sent as given: an `InvalidConfigException` without one |
 | `report()` | `POST /v1/flows`, `flowSyntax: FRR` | |
-| `findFlow()` | `POST /v1/flows/search`, `where: {trackingId, flowDirection: [Out]}`, `limit` 100 | the flow sent with that key - the one not rejected, the earliest submitted, when there are several; none: `null` |
+| `findFlow()` | `POST /v1/flows/search`, `where: {trackingId, flowDirection: [Out]}`, `limit` 100 | the flow sent with that key - an invoice, a report or a status's lifecycle message - the one not rejected, the earliest submitted, when there are several; none: `null` |
 | `lookup()` | `POST /v1/directory-line/search`, `filters.siren` or `filters.siret` (`op: strict`), `include: [siren, siret, routingCode]` | `list<Addressing>`; 204: none |
 | `notify()` | a webhook's call | its `Afnor-Signature` checked; the `Flow` it carries |
 
@@ -221,7 +221,7 @@ omnibill:
 | 401 | the token forgotten and asked again once; a second 401 `InvalidKeyException` |
 | 403 | `InvalidKeyException` (`The platform refused the request (HTTP 403): ...`) |
 | other 4xx | `ProviderException` (`HTTP 422: <errorCode> <errorMessage> - <details>`, `providerCode` the `errorCode`) |
-| a 5xx or a timeout (10 s) after `POST /v1/flows` (submit, setStatus, report) | `OutcomeUnknownException` (an `UnreachableException`): the flow may be there - `findFlow($trackingId)` before submitting again |
+| a 5xx or a timeout (10 s) after `POST /v1/flows` (submit, setStatus, report) | `OutcomeUnknownException` (an `UnreachableException`): the flow may be there - `findFlow($trackingId)` before submitting again (a status: the `trackingId` given to `setStatus()`, since omnibill 1.3; without one, a person checks) |
 | 5xx, 429, no answer, a timeout to a read (the searches, the downloads, the token); a host that did not resolve, a connection refused | `UnreachableException`: nothing transmitted |
 | a body that is not JSON where JSON is expected | `ProviderException` |
 | a flow without a `flowId` | `ProviderException` |

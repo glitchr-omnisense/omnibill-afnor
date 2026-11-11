@@ -21,6 +21,8 @@ $flow = $platform->submit($invoice);              // POST /v1/flows: PENDING
 $platform->fetchStatus($flow)->status;            // Ok: DEPOSITED (200); Error: REJECTED (213), ->errors
 $inbox = $platform->receive($cursor);             // suppliers' invoices; statuses (CDAR) read: PAID, REFUSED...
 $platform->lookup('702042755');                   // the directory's lines for a SIREN or a SIRET
+$platform->setStatus($paid, $flow, 'status:42:1'); // the application's CDAR as a flow, with its trackingId
+$platform->findFlow('status:42:1');               // after an OutcomeUnknownException: that flow, or null
 ```
 
 Written from the standard's **OpenAPI 1.3.0** (Flow Service and Directory Service, annexes A and B,

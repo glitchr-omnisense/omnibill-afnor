@@ -10,7 +10,9 @@ use Omnibill\Request\SetStatus;
 
 /**
  * A status declared: its lifecycle message (CDAR), produced by the
- * application, submitted as a flow of its own.
+ * application, submitted as a flow of its own - since omnibill 1.3 with the
+ * request's trackingId in its flowInfo, so that findFlow() finds it again
+ * after an OutcomeUnknownException. The file is sent as given, unread.
  */
 final class SetStatusAction extends AbstractAction
 {
@@ -25,8 +27,8 @@ final class SetStatusAction extends AbstractAction
         $change = $request->change;
         $file = $change->file ?? throw new InvalidConfigException('An approved platform carries a status as a lifecycle message: give the StatusChange its CDAR file - the family does not write one.');
         $name = $change->filename ?? \sprintf('CDV-%s-%s.xml', $change->status->code() ?? $change->status->value, preg_replace('~[^A-Za-z0-9_-]+~', '-', (string) $change->invoiceNumber));
-        $info = $this->api->submit($file, $name, Syntax::CDAR, null, null, null);
-        $flow = Api::flow(['flowSyntax' => 'CDAR', 'flowDirection' => 'Out', 'acknowledgement' => ['status' => 'Pending']] + $info, $change->invoiceNumber);
+        $info = $this->api->submit($file, $name, Syntax::CDAR, $request->trackingId, null, null);
+        $flow = Api::flow(['flowSyntax' => 'CDAR', 'flowDirection' => 'Out', 'acknowledgement' => ['status' => 'Pending']] + $info + array_filter(['trackingId' => $request->trackingId]), $change->invoiceNumber);
         $request->setResult($flow->with(status: $change->status, history: [...($request->flow->history ?? []), $change]));
     }
 }

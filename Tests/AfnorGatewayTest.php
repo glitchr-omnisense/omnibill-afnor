@@ -25,6 +25,7 @@ use Omnibill\Model\Syntax;
 use Omnibill\Request\Lookup;
 use Omnibill\Request\Notify;
 use Omnibill\Request\Receive;
+use Omnibill\Request\SetStatus;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -173,6 +174,31 @@ final class AfnorGatewayTest extends TestCase
 
         $this->expectException(InvalidConfigException::class);
         $gateway->setStatus(new StatusChange(LifecycleStatus::REFUSED, 'F-1'));
+    }
+
+    public function testAStatusWhoseOutcomeIsUnknownIsFoundAgainByTheTrackingIdOfItsFlow(): void
+    {
+        // the lifecycle message is the application's: an opaque stand-in, sent as given
+        $change = new StatusChange(LifecycleStatus::REFUSED, 'F-2026-042', reason: 'Not ordered', file: 'lifecycle message, as the application wrote it', filename: 'CDV-210-F-2026-042.xml');
+        try {
+            $this->gateway(['POST /v1/flows' => new MockResponse('', ['http_code' => 504])])->execute(new SetStatus($change, null, 'status:F-2026-042:1'));
+            self::fail();
+        } catch (OutcomeUnknownException $e) {
+            self::assertSame('{"trackingId":"status:F-2026-042:1","name":"CDV-210-F-2026-042.xml","flowSyntax":"CDAR","sha256":"'.hash('sha256', (string) $change->file).'"}', explode("\r\n", explode("\r\n\r\n", $this->body(0), 2)[1], 2)[0], 'the key in the flowInfo, beside its name and hash');
+        }
+
+        $this->calls = [];
+        $found = new MockResponse('{"limit":100,"results":[{"flowId":"c4d5e6f7-0a1b-4c2d-8e3f-4a5b6c7d8e9f","submittedAt":"2026-11-11T09:00:00Z","trackingId":"status:F-2026-042:1","name":"CDV-210-F-2026-042.xml","flowSyntax":"CDAR","flowType":"CustomerInvoiceLC","flowDirection":"Out","acknowledgement":{"status":"Ok"}}]}');
+        $flow = self::lookup($this->gateway(['POST /v1/flows/search' => $found]))->findFlow('status:F-2026-042:1');
+        self::assertSame(['c4d5e6f7-0a1b-4c2d-8e3f-4a5b6c7d8e9f', FlowKind::LIFECYCLE, FlowState::ACCEPTED, 'status:F-2026-042:1'], [$flow?->reference, $flow?->kind, $flow?->state, $flow?->trackingId]);
+        self::assertSame(['limit' => 100, 'where' => ['trackingId' => 'status:F-2026-042:1', 'flowDirection' => ['Out']]], json_decode($this->body(0), true));
+
+        $this->calls = [];
+        $sent = $this->gateway(['POST /v1/flows' => new MockResponse('{"flowId":"c4d5e6f7-0a1b-4c2d-8e3f-4a5b6c7d8e9f","submittedAt":"2026-11-11T09:00:00Z"}', ['http_code' => 202])])->execute(new SetStatus($change, null, 'status:F-2026-042:2'))->getFlow();
+        self::assertSame(['status:F-2026-042:2', LifecycleStatus::REFUSED], [$sent?->trackingId, $sent?->status], 'the key kept where the answer does not echo it');
+        $this->calls = [];
+        $this->gateway(['POST /v1/flows' => new MockResponse('{"flowId":"x"}', ['http_code' => 202])])->setStatus($change);
+        self::assertStringNotContainsString('trackingId', explode('filename=', $this->body(0))[0], 'none given: none sent, as before');
     }
 
     public function testTheDirectorySaysWhereACompanyReceives(): void
