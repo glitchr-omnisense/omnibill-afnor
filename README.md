@@ -32,6 +32,14 @@ DGFiP's external specifications (Annex 2, Flux 6). **Not verified against a plat
 [Documentation](docs/index.md): the sources and what is missing from them, the options, each
 operation and its route, the webhooks' signature, what was verified.
 
+## Install
+
+```sh
+composer require omnibill/afnor
+```
+
+It brings the family's core, `omnisense/omnibill`, and `omnisense/contracts` with it. **An account with an approved platform (plateforme agréée) is needed**: its API's address and OAuth client credentials. Not verified against a platform; the tests run on recorded answers. For a first call with no account, the core's README sends an invoice through `omnibill/email`.
+
 ## Usage policy
 
 Its rate limits, rights and prices are each approved platform's, in its contract: `policy.json`

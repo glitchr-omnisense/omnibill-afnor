@@ -21,8 +21,8 @@
     "require": {
         "php": ">=8.2",
         "ext-dom": "*",
-        "omnisense/contracts": "^1.0@dev",
-        "omnisense/omnibill": "^1.0@dev",
+        "omnisense/contracts": "^1.0",
+        "omnisense/omnibill": "^1.0",
         "symfony/http-client": "^6.4|^7.0|^8.0"
     },
     "require-dev": {
@@ -41,7 +41,7 @@
             "Omnibill\\Afnor\\Tests\\": "Tests/"
         }
     },
-    "extra": {
+    "extra": {"branch-alias": {"dev-1.x": "1.x-dev"}, 
         "omnisense": {
             "policy": "policy.json"
         }
